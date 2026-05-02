@@ -9,6 +9,8 @@ from .handlers.registration import RegistrationHandler
 from .handlers.login import LoginHandler
 from .handlers.logout import LogoutHandler
 from .handlers.user import UserHandler
+# Import the personal data handler for encrypted user details.
+from .personal import PersonalHandler
 
 class Application(Application):
 
@@ -19,7 +21,9 @@ class Application(Application):
             (r'/students/api/registration', RegistrationHandler),
             (r'/students/api/login', LoginHandler),
             (r'/students/api/logout', LogoutHandler),
-            (r'/students/api/user', UserHandler)
+            (r'/students/api/user', UserHandler),
+            # Route for encrypted personal data create/read/update.
+            (r'/students/api/personal', PersonalHandler)
         ]
 
         settings = dict()

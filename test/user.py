@@ -4,6 +4,7 @@ from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
 from tornado.web import Application
 
+import api.handlers.helper as helper
 from api.handlers.user import UserHandler
 
 from .base import BaseTest
@@ -16,17 +17,39 @@ class UserHandlerTest(BaseTest):
         super().setUpClass()
 
     async def register(self):
+        # Hash the seeded user passphrase for authentication tests.
+        passphrase_hash, passphrase_salt = helper.hash_secret(self.password)
+        master_key = helper.get_master_key()
+        email_id = helper.derive_email_id(self.email, master_key)
+        email_cipher, email_nonce = helper.encrypt_field(self.email, master_key)
+        display_cipher, display_nonce = helper.encrypt_field(self.display_name, master_key)
         await self.get_app().db.users.insert_one({
-            'email': self.email,
-            'password': self.password,
-            'displayName': self.display_name
+            'email_id': email_id,
+            'passphrase_hash': passphrase_hash,
+            'passphrase_salt': passphrase_salt,
+            'email': {
+                'cipher': email_cipher,
+                'nonce': email_nonce
+            },
+            'displayName': {
+                'cipher': display_cipher,
+                'nonce': display_nonce
+            }
         })
 
     async def login(self):
+        # Store a hashed session token for the authenticated user.
+        token_hash, token_salt = helper.hash_secret(self.token)
+        master_key = helper.get_master_key()
+        email_id = helper.derive_email_id(self.email, master_key)
         await self.get_app().db.users.update_one({
-            'email': self.email
+            'email_id': email_id
         }, {
-            '$set': { 'token': self.token, 'expiresIn': 2147483647 }
+            '$set': {
+                'token_hash': token_hash,
+                'token_salt': token_salt,
+                'expiresIn': 2147483647
+            }
         })
 
     def setUp(self):
@@ -54,8 +77,9 @@ class UserHandlerTest(BaseTest):
         response = self.fetch('/user')
         self.assertEqual(400, response.code)
 
+    # Added headers to fetch request to ensure the token is included in the request.
+    # Correct answer is 403 since the token is invalid, not 400 which indicates a missing token.
     def test_user_wrong_token(self):
         headers = HTTPHeaders({'X-Token': 'wrongToken'})
-
-        response = self.fetch('/user')
-        self.assertEqual(400, response.code)
+        response = self.fetch('/user', headers=headers)
+        self.assertEqual(403, response.code)

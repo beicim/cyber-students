@@ -3,6 +3,7 @@ from tornado.escape import json_decode
 from tornado.ioloop import IOLoop
 from tornado.web import Application
 
+import api.handlers.helper as helper
 from .base import BaseTest
 
 from api.handlers.login import LoginHandler
@@ -15,10 +16,24 @@ class LoginHandlerTest(BaseTest):
         super().setUpClass()
 
     async def register(self):
+        # Hash the passphrase for the seeded user account.
+        passphrase_hash, passphrase_salt = helper.hash_secret(self.password)
+        master_key = helper.get_master_key()
+        email_id = helper.derive_email_id(self.email, master_key)
+        email_cipher, email_nonce = helper.encrypt_field(self.email, master_key)
+        display_cipher, display_nonce = helper.encrypt_field('testDisplayName', master_key)
         await self.get_app().db.users.insert_one({
-            'email': self.email,
-            'password': self.password,
-            'displayName': 'testDisplayName'
+            'email_id': email_id,
+            'passphrase_hash': passphrase_hash,
+            'passphrase_salt': passphrase_salt,
+            'email': {
+                'cipher': email_cipher,
+                'nonce': email_nonce
+            },
+            'displayName': {
+                'cipher': display_cipher,
+                'nonce': display_nonce
+            }
         })
 
     def setUp(self):
